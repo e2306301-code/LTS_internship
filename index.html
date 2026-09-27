@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>給湯器 かんたん点検</title>
+  <title>ガス機器サポート</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap');
 
@@ -178,6 +178,25 @@
     }
 
     .button-stack { display: grid; gap: 16px; }
+
+    .inline-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 64px;
+      padding: 12px 18px;
+      border: 2px solid var(--ink);
+      border-radius: 16px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .inline-link:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), .08); }
+    .inline-link:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; }
 
     .start-photo-action { margin-top: 16px; }
 
@@ -452,8 +471,8 @@
     .choice:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; }
     .choice[aria-pressed="true"] { border: 4px solid var(--accent); background: rgba(var(--accent-rgb), .08); }
     .choice .choice-symbol { display: block; margin-bottom: 8px; font-size: 30px; line-height: 1; }
-    .choice-emergency { border-color: var(--danger); background: var(--danger-bg); }
-    .choice-emergency:hover { border-color: var(--danger); }
+    .choice-emergency { border-color: var(--line); background: var(--surface); }
+    .choice-emergency:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), .08); }
 
     .safe-warning { margin: 20px 0 0; color: var(--danger); font-size: 18px; font-weight: 700; line-height: 1.6; }
     .safe-warning-call { display: inline-block; margin-top: 4px; color: var(--danger); font-size: 18px; font-weight: 700; }
@@ -528,7 +547,6 @@
     </header>
     <main id="app" aria-live="polite"></main>
   </div>
-  <div class="bottom-call">困ったときは お電話ください 📞 <a href="tel:0120-000-000">0120-000-000（試作用のダミー番号）</a></div>
 
   <script>
     (() => {
@@ -541,28 +559,6 @@
       const progressLabel = document.getElementById('progress-label');
       const progressBar = document.getElementById('progress-bar');
       const progressTrack = document.querySelector('.progress-track');
-      const state = {
-        screen: 'start',
-        history: [],
-        values: Object.fromEntries(meta.features.map((feature) => [feature, ''])),
-        symptom: null,
-        adviceKey: null,
-        result: null,
-        editingFromConfirm: false,
-        fromPhoto: false
-      };
-
-      let cameraStream = null;
-      let cameraViewActive = false;
-      let photoBusy = false;
-      let photoPreviewSrc = '';
-      let photoPreviewObjectUrl = '';
-      let photoCountMessage = '';
-      let photoErrorMessage = '';
-      let photoRunId = 0;
-      let activeWorker = null;
-      let tesseractPromise = null;
-
       const groups = [
         { number: 1, features: meta.features.slice(0, 5) },
         { number: 2, features: meta.features.slice(5, 10) },
@@ -573,44 +569,130 @@
         temparature2: '温度', humidity2: '湿度', valtage2: '電圧', usage2: '使用量', rotation2: '回転数',
         temparature3: '温度', humidity3: '湿度', valtage3: '電圧', usage3: '使用量', rotation3: '回転数'
       };
-      const advice = {
-        A: {
-          title: '🔌 電源・ブレーカーを確認する',
-          steps: ['家のブレーカー（分電盤）が落ちていないか見てください', '給湯器の電源プラグがコンセントから抜けていないか見てください', '雷や大雨のあとは、プラグを抜いて1分待ってから差し直してください（安全装置のリセット）', 'ブレーカーがまたすぐ落ちるときは、漏電のおそれがあります。上げなおさずにお電話ください。'],
-          cautions: ['ぬれた手でプラグやブレーカーにさわらないでください。', '大雨のあとで屋外のコンセントやプラグがぬれている・水につかったときは、さわらずにお電話ください。']
+
+      const state = {
+        screen: 'start',
+        history: [],
+        branch: null,
+        issue: null,
+        diagnosis: null,
+        photoPreview: '',
+        result: null,
+        values: Object.fromEntries(meta.features.map((feature) => [feature, '']))
+      };
+
+      const emergencySymptoms = [
+        { key: 'gas_smell', icon: '⚠️', text: 'ガスのにおいがする' },
+        { key: 'hissing', icon: '🔊', text: 'ガスが漏れているような音がする' },
+        { key: 'smoke', icon: '💨', text: '黒煙・こげくさいにおい・すすが出る' },
+        { key: 'water', icon: '💧', text: '水漏れ・ぬれている・床が濡れている' },
+        { key: 'noise', icon: '🔔', text: '大きな異音・振動・急な停止が続く' }
+      ];
+
+      const selfHelpList = {
+        no_hot: {
+          title: 'お湯が出ない・湯量が少ない',
+          source: '東京ガスなどの想定問題',
+          steps: [
+            'ガスメーターの安全装置や給湯器の表示が点滅していないか確認してください。点滅が続くときはガスの供給に問題があることがあります。',
+            'ガスの元栓と止水栓が閉まっていないか、蛇口やフィルターの目詰まりがないかを見てください。',
+            'リモコンの優先設定や温度設定が適切か確認し、温度を上げてから再度お湯を出してみてください。'
+          ],
+          caution: 'ガスのにおい、黒煙、または強い異音があるときは、すぐにガス会社や工事店に連絡してください。'
         },
-        B: {
-          title: '🔥 ガスメーターの安全装置を確認する',
-          steps: ['ガスメーターの赤いランプが点滅していないか見てください', '点滅していたら、ガス器具をすべて止めてから、メーターの復帰ボタンを奥までしっかり押して、すぐ離してください', 'ガスを使わずに約3分待ち、ランプの点滅が消えたら使えます', '3分たってもまた点滅するときは、ガスもれのおそれがあります。ガス会社に連絡してください', 'ガス栓が閉まっていないかも見てください'],
-          cautions: ['ガスのにおいがするときは、この手順はせず、火や電気のスイッチにふれずに窓を開け、ガス会社に連絡してください。', '11・111 以外の番号が出ているときは、使うのをやめてお電話ください。']
+        weak_flow: {
+          title: 'お湯の出が弱い・温度が低い',
+          source: '水圧や温度設定に起因する想定問題',
+          steps: [
+            '給湯器のリモコンで、温度を通常の設定に戻し、他の出湯口でも試してください。',
+            '蛇口の水量や節水シャワーヘッドが原因で出が弱くなることがあります。通常の状態に戻して確認してください。',
+            '給湯器側のフィルターや水道の止水栓にゴミがないか確認し、必要に応じて清掃してください。'
+          ],
+          caution: '長く続く場合は点検が必要です。'
         },
-        C: {
-          title: '🚿 水の量・フィルターの詰まりを確認する',
-          steps: ['蛇口を大きく開けてください（水の量が少ないと、お湯をわかす火がつかない仕組みです）', '節水シャワーヘッドを使っている場合は、ふつうのものに替えて試してください', '給湯器の水の入口にあるフィルター（ストレーナ）にゴミが詰まっていることがあります。取扱説明書の手順でお手入れしてください'],
-          caution: '分解がむずかしいときは、無理をせずお電話ください。'
+        ignition: {
+          title: '火がつかない・再点火できない',
+          source: '点火不良や燃焼確認の想定問題',
+          steps: [
+            '給湯器とガスメーターの電源状態を確認し、専用のリセット操作ができるか確認してください。',
+            'ガスの供給が止まっていないか、ガスメーターのランプや表示に異常がないか確認してください。',
+            '冬場にお湯が出にくい場合は、配管の凍結や水の通りが悪くなっていないかを確認してください。'
+          ],
+          caution: '点火が失敗し続けるときは、燃焼不良やガスの供給不良の可能性があるため、点検をおすすめします。'
         },
-        D: {
-          title: '❄ 配管の凍結を確認する',
-          steps: ['気温が上がって自然にとけるのを待ってください', '急ぐときは、配管にタオルを巻き、ぬるま湯をゆっくりかけてください', '寒い夜は、蛇口から少し水を出しっぱなしにすると凍結を防げます', '給湯器本体にはお湯をかけないでください', 'とけたあと、水もれがないか確認してください。もれていたらお電話ください。'],
-          caution: '熱湯はかけないでください。配管が破れるおそれがあります。'
+        sensor: {
+          title: '表示ランプやセンサー表示が不安定',
+          source: 'センサーや表示板の異常に起因する想定問題',
+          steps: [
+            'リモコンの表示が一時的に落ちている場合は、電源を切って数分後に再度点灯を確認してください。',
+            'センサーが汚れている・熱い場所に置かれている場合は、清掃や設置位置の見直しをしてください。',
+            '表示内容が一貫しない場合は、通常出ている表示と照らし合わせ、写真を残して状態を確認してください。'
+          ],
+          caution: '表示されている数値やエラー内容が曖昧な場合は、状況を記録して点検依頼に繋げるとスムーズです。'
         },
-        E: {
-          title: '🌡 リモコンの「優先」設定を確認する',
-          steps: ['台所とおふろにリモコンがある場合、「優先」ランプがついている方の温度でお湯が出ます', '使う場所のリモコンで「優先」ボタンを押してから、温度を設定してください'],
-          caution: null
+        freeze: {
+          title: '冬場だけお湯が出にくい・凍結が心配',
+          source: '凍結対策・保温に関する想定問題',
+          steps: [
+            '屋外の配管や水道管が凍結していないか確認してください。凍結が見られるときは、ゆっくりと室温を上げて解凍してください。',
+            '給湯器本体には熱湯をかけず、タオルで保温するなどの方法でゆっくりと温度を回復させてください。',
+            '寒い夜は水を少し流し続ける、配管の保護をするなどの予防策を取ってください。'
+          ],
+          caution: '凍結の状態が悪化すると、破裂の恐れがあります。無理に温めず、必要に応じて点検を依頼してください。'
         }
       };
-      const symptoms = [
-        ['A', '🔌', 'リモコンの画面が消えている・つかない'],
-        ['B', '🔥', 'リモコンにエラー番号『11』か『111』が出て、お湯がつかない'],
-        ['C', '🚿', 'お湯の出が弱い・途中で水になる'],
-        ['D', '❄', '寒い朝に、お湯も水も出ない'],
-        ['E', '🌡', 'お湯は出るが、温度が思ったとおりにならない'],
-        ['F', '？', 'よくわからない（5つの対処法を見る）']
-      ];
+
+      let photoBusy = false;
+      let photoPreviewObjectUrl = '';
+      let photoRunId = 0;
+      let activeWorker = null;
+      let tesseractPromise = null;
 
       function escapeHtml(value) {
         return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+      }
+
+      function progressFor(screen) {
+        if (screen === 'inquiry') return 1;
+        if (screen === 'diagnosis-select') return 2;
+        if (screen === 'photo' || screen === 'input1' || screen === 'input2' || screen === 'input3' || screen === 'fault-phone' || screen === 'selfhelp-list' || screen === 'selfhelp' || screen === 'operator-phone' || screen === 'complete') return 3;
+        if (screen === 'emergency-phone') return 4;
+        return 0;
+      }
+
+      function go(screen) {
+        if (screen !== state.screen) state.history.push(state.screen);
+        state.screen = screen;
+        render();
+        window.scrollTo(0, 0);
+      }
+
+      function back() {
+        const previous = state.history.pop();
+        if (!previous) return;
+        state.screen = previous;
+        render();
+        window.scrollTo(0, 0);
+      }
+
+      function reset() {
+        state.screen = 'start';
+        state.history = [];
+        state.branch = null;
+        state.issue = null;
+        state.diagnosis = null;
+        state.photoPreview = '';
+        state.result = null;
+        state.values = Object.fromEntries(meta.features.map((feature) => [feature, '']));
+        if (photoPreviewObjectUrl) URL.revokeObjectURL(photoPreviewObjectUrl);
+        photoPreviewObjectUrl = '';
+        photoBusy = false;
+        photoRunId += 1;
+        render();
+      }
+
+      function getPhoneNumber() {
+        return '0120-000-000';
       }
 
       function displayNumber(value) {
@@ -619,320 +701,16 @@
         return Number.isFinite(numeric) ? numeric.toFixed(1) : String(value);
       }
 
-      function groupForScreen(screen) {
-        return screen.startsWith('input') ? groups[Number(screen.slice(-1)) - 1] : null;
-      }
-
-      function progressFor(screen) {
-        if (screen === 'photo') return 1;
-        if (screen === 'input1') return 1;
-        if (screen === 'input2') return 2;
-        if (screen === 'input3') return 3;
-        if (screen === 'confirm') return 4;
-        if (screen !== 'start') return 5;
-        return 0;
-      }
-
-      function allValuesValid() {
-        return ADKApp.allValid(state.values, meta.features, meta.featureMeta);
-      }
-
-      function firstInvalidScreen() {
-        const groupNumber = ADKApp.firstInvalidGroup(state.values, groups, meta.featureMeta);
-        return groupNumber === null ? 'confirm' : `input${groupNumber}`;
-      }
-
-      function goToConfirmOrFirstInvalid() {
-        go(allValuesValid() ? 'confirm' : firstInvalidScreen());
-      }
-
-      function go(screen) {
-        if (state.screen === 'photo' && screen !== 'photo') cancelPhotoWork();
-        stopCamera();
-        if (screen === 'confirm' && !allValuesValid()) screen = firstInvalidScreen();
-        if (state.screen !== screen) state.history.push(state.screen);
-        state.screen = screen;
-        if (screen === 'confirm') state.editingFromConfirm = false;
-        render({ moveFocus: true });
-        window.scrollTo(0, 0);
-      }
-
-      function back() {
-        stopCamera();
-        if (state.screen === 'photo') cancelPhotoWork();
-        let previous = state.history.pop();
-        if (!previous) return;
-        state.screen = previous;
-        if (previous === 'confirm') {
-          state.editingFromConfirm = false;
-          previous = firstInvalidScreen();
-        }
-        state.screen = previous;
-        render({ moveFocus: true });
-        window.scrollTo(0, 0);
-      }
-
-      function reset() {
-        stopCamera();
-        cancelPhotoWork();
-        clearPhotoUi();
-        state.screen = 'start';
-        state.history = [];
-        state.symptom = null;
-        state.adviceKey = null;
-        state.result = null;
-        state.editingFromConfirm = false;
-        state.fromPhoto = false;
-        state.values = Object.fromEntries(meta.features.map((feature) => [feature, '']));
-        render({ moveFocus: true });
-      }
-
-      function stopCamera() {
-        if (cameraStream) {
-          cameraStream.getTracks().forEach((track) => track.stop());
-          cameraStream = null;
-        }
-        const video = app.querySelector('[data-photo-video]');
-        if (video) video.srcObject = null;
-        cameraViewActive = false;
-      }
-
-      function cancelPhotoWork() {
-        photoRunId += 1;
-        photoBusy = false;
-        const worker = activeWorker;
-        activeWorker = null;
-        if (worker) worker.terminate().catch(() => {});
-      }
-
-      function clearPhotoUi() {
-        if (photoPreviewObjectUrl) URL.revokeObjectURL(photoPreviewObjectUrl);
-        photoPreviewObjectUrl = '';
-        photoPreviewSrc = '';
-        photoCountMessage = '';
-        photoErrorMessage = '';
-      }
-
-      function resetPhotoUi() {
-        stopCamera();
-        cancelPhotoWork();
-        clearPhotoUi();
-      }
-
-      function loadTesseract() {
-        if (window.Tesseract) return Promise.resolve(window.Tesseract);
-        if (tesseractPromise) return tesseractPromise;
-        tesseractPromise = new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.async = true;
-          script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract.js is unavailable'));
-          script.onerror = () => reject(new Error('Tesseract.js failed to load'));
-          document.head.appendChild(script);
-        });
-        return tesseractPromise;
-      }
-
-      function previewSourceFor(source) {
-        if (source && typeof source.toDataURL === 'function') return source.toDataURL('image/jpeg', .9);
-        photoPreviewObjectUrl = URL.createObjectURL(source);
-        return photoPreviewObjectUrl;
-      }
-
-      function loadImage(sourceUrl) {
-        return new Promise((resolve, reject) => {
-          const image = new Image();
-          image.onload = () => resolve(image);
-          image.onerror = () => reject(new Error('画像を読み込めませんでした'));
-          image.src = sourceUrl;
-        });
-      }
-
-      function otsuThreshold(grayscale) {
-        const histogram = new Array(256).fill(0);
-        grayscale.forEach((value) => { histogram[value] += 1; });
-        const total = grayscale.length;
-        let sum = 0;
-        histogram.forEach((count, value) => { sum += value * count; });
-        let sumBackground = 0;
-        let weightBackground = 0;
-        let bestThreshold = 127;
-        let bestVariance = 0;
-        for (let threshold = 0; threshold < 256; threshold += 1) {
-          weightBackground += histogram[threshold];
-          if (weightBackground === 0) continue;
-          const weightForeground = total - weightBackground;
-          if (weightForeground === 0) break;
-          sumBackground += threshold * histogram[threshold];
-          const meanBackground = sumBackground / weightBackground;
-          const meanForeground = (sum - sumBackground) / weightForeground;
-          const variance = weightBackground * weightForeground * (meanBackground - meanForeground) ** 2;
-          if (variance > bestVariance) {
-            bestVariance = variance;
-            bestThreshold = threshold;
-          }
-        }
-        return bestThreshold;
-      }
-
-      function preprocessImage(image) {
-        const sourceWidth = image.naturalWidth || image.width;
-        const sourceHeight = image.naturalHeight || image.height;
-        const longSide = Math.max(sourceWidth, sourceHeight);
-        const scale = 1600 / longSide;
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-        canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const grayscale = new Array(canvas.width * canvas.height);
-        let totalBrightness = 0;
-        for (let index = 0, pixel = 0; index < imageData.data.length; index += 4, pixel += 1) {
-          const luminance = Math.round(.299 * imageData.data[index] + .587 * imageData.data[index + 1] + .114 * imageData.data[index + 2]);
-          grayscale[pixel] = luminance;
-          totalBrightness += luminance;
-        }
-        const meanBrightness = totalBrightness / grayscale.length;
-        // A mean below 128 means the LCD/photo is mostly dark, so invert it first.
-        if (meanBrightness < 128) grayscale.forEach((value, index) => { grayscale[index] = 255 - value; });
-        const threshold = otsuThreshold(grayscale);
-        for (let pixel = 0, index = 0; pixel < grayscale.length; pixel += 1, index += 4) {
-          const value = grayscale[pixel] >= threshold ? 255 : 0;
-          imageData.data[index] = value;
-          imageData.data[index + 1] = value;
-          imageData.data[index + 2] = value;
-          imageData.data[index + 3] = 255;
-        }
-        context.putImageData(imageData, 0, 0);
-        return canvas;
-      }
-
-      async function runPhotoOcr(source) {
-        const runId = ++photoRunId;
-        photoBusy = true;
-        photoCountMessage = '';
-        photoErrorMessage = '';
-        photoPreviewSrc = previewSourceFor(source);
-        render({ moveFocus: false });
-        let worker = null;
-        try {
-          const image = await loadImage(photoPreviewSrc);
-          if (runId !== photoRunId || state.screen !== 'photo') return;
-          const processedCanvas = preprocessImage(image);
-          const tesseract = await loadTesseract();
-          if (runId !== photoRunId || state.screen !== 'photo') return;
-          worker = await tesseract.createWorker('eng');
-          activeWorker = worker;
-          await worker.setParameters({
-            tessedit_char_whitelist: '0123456789.',
-            tessedit_pageseg_mode: '11' // sparse text: keeps widely spaced numbers as separate tokens (psm 6 merged "172.2 175.6" into one). Must be a string: numeric values are silently ignored
-          });
-          const result = await worker.recognize(processedCanvas);
-          if (runId !== photoRunId || state.screen !== 'photo') return;
-          const numbers = ADKApp.extractNumbers(result?.data?.text || '');
-          const readings = ADKApp.assignReadings(numbers, meta.features);
-          if (!readings) {
-            photoBusy = false;
-            photoCountMessage = `数字を${numbers.length}個読み取りました（15個必要です）。うまく読み取れませんでした。`;
-            render({ moveFocus: false });
-            return;
-          }
-          state.values = readings;
-          state.fromPhoto = true;
-          photoBusy = false;
-          clearPhotoUi();
-          goToConfirmOrFirstInvalid();
-        } catch (error) {
-          if (runId !== photoRunId || state.screen !== 'photo') return;
-          photoBusy = false;
-          photoErrorMessage = '読み取りができませんでした。インターネットにつながっているか確認するか、手で入力してください。';
-          render({ moveFocus: false });
-        } finally {
-          if (worker && activeWorker === worker) {
-            activeWorker = null;
-            await worker.terminate();
-          }
-        }
-      }
-
-      function triggerPhotoFile(kind) {
-        const input = app.querySelector(`[data-photo-file="${kind}"]`);
-        if (input) input.click();
-      }
-
-      async function startCamera() {
-        if (photoBusy) return;
-        photoCountMessage = '';
-        photoErrorMessage = '';
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          triggerPhotoFile('camera');
-          return;
-        }
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (state.screen !== 'photo') {
-            stream.getTracks().forEach((track) => track.stop());
-            return;
-          }
-          cameraStream = stream;
-          cameraViewActive = true;
-          render({ moveFocus: false });
-          const video = app.querySelector('[data-photo-video]');
-          video.srcObject = stream;
-          await video.play();
-        } catch (error) {
-          stopCamera();
-          cameraViewActive = false;
-          render({ moveFocus: false });
-          triggerPhotoFile('camera');
-        }
-      }
-
-      function captureCameraFrame() {
-        if (photoBusy || !cameraStream) return;
-        const video = app.querySelector('[data-photo-video]');
-        if (!video || !video.videoWidth || !video.videoHeight) return;
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-        stopCamera();
-        runPhotoOcr(canvas);
-      }
-
-      function continueWithManualInput() {
-        resetPhotoUi();
-        state.fromPhoto = false;
-        go('input1');
-      }
-
-      function fillDemo(kind) {
-        const demo = meta.demoRows[kind];
-        meta.features.forEach((feature, index) => { state.values[feature] = String(demo.features[index]); });
-        state.history = [];
-        state.screen = 'start';
-        state.editingFromConfirm = false;
-        state.fromPhoto = false;
-        goToConfirmOrFirstInvalid();
-      }
-
       function fieldIsValid(feature) {
         return ADKApp.isFeatureValid(feature, state.values[feature], meta.featureMeta[feature]);
       }
 
-      function groupIsValid(group) { return ADKApp.allValid(state.values, group.features, meta.featureMeta); }
-
-      function hasValue(value) { return String(value ?? '').trim() !== ''; }
-
-      function isOutOfRange(feature) {
-        const info = meta.featureMeta[feature];
-        const value = ADKApp.parseValue(state.values[feature]);
-        return !info.isRotation && Number.isFinite(value) && (value < info.hardMin || value > info.hardMax);
+      function groupIsValid(group) {
+        return ADKApp.allValid(state.values, group.features, meta.featureMeta);
       }
 
-      function rangeWarningMarkup(feature) {
-        return `<div class="field-range-warning" ${isOutOfRange(feature) ? '' : 'hidden'}>数字がまちがいないときは、故障のおそれがあります。<a class="btn-call" href="tel:0120-000-000">📞 修理窓口に電話する 0120-000-000</a></div>`;
+      function hasValue(value) {
+        return String(value ?? '').trim() !== '';
       }
 
       function validationMessage(feature) {
@@ -940,183 +718,217 @@
         return `数字をもう一度ご確認ください（${displayNumber(info.hardMin)}〜${displayNumber(info.hardMax)}）`;
       }
 
+      function groupForScreen(screen) {
+        return screen.startsWith('input') ? groups[Number(screen.slice(-1)) - 1] : null;
+      }
+
       function renderField(feature) {
         const info = meta.featureMeta[feature];
         const value = state.values[feature];
         const invalid = hasValue(value) && !fieldIsValid(feature);
-        const label = labels[feature];
         if (info.isRotation) {
           return `<div class="num-field ${invalid ? 'is-invalid' : ''}" data-field="${feature}">
-            <div class="field-label">${escapeHtml(label)}<small>画面に出ている回転数</small></div>
+            <div class="field-label">${escapeHtml(labels[feature])}<small>画面に出ている回転数</small></div>
             <p class="field-hint">選べる数字から選んでください。</p>
-            <div class="rotation-choices" role="group" aria-label="${escapeHtml(label)}">
+            <div class="rotation-choices" role="group" aria-label="${escapeHtml(labels[feature])}">
               ${info.allowed.map((allowed) => `<button type="button" class="rotation-button" data-rotation="${feature}" data-value="${allowed}" aria-pressed="${ADKApp.parseValue(value) === Number(allowed)}">${allowed}</button>`).join('')}
             </div>
-              <p class="field-error" aria-live="polite">${invalid ? validationMessage(feature) : ''}</p>
-              ${rangeWarningMarkup(feature)}
+            <p class="field-error" aria-live="polite">${invalid ? validationMessage(feature) : ''}</p>
           </div>`;
         }
+
         return `<div class="num-field ${invalid ? 'is-invalid' : ''}" data-field="${feature}">
-          <label class="field-label" for="${feature}">${escapeHtml(label)}<small>画面に出ている数字</small></label>
+          <label class="field-label" for="${feature}">${escapeHtml(labels[feature])}<small>画面に出ている数字</small></label>
           <p class="field-hint">ふつうは ${displayNumber(info.p1)}〜${displayNumber(info.p99)} くらい</p>
           <div class="stepper">
-            <button type="button" class="step-button" data-step-feature="${feature}" data-step-direction="-1" aria-label="${escapeHtml(label)}を0.5減らす">−</button>
+            <button type="button" class="step-button" data-step-feature="${feature}" data-step-direction="-1" aria-label="${escapeHtml(labels[feature])}を0.5減らす">−</button>
             <input id="${feature}" class="number-input" data-input-feature="${feature}" type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(value)}" aria-describedby="error-${feature}">
-            <button type="button" class="step-button" data-step-feature="${feature}" data-step-direction="1" aria-label="${escapeHtml(label)}を0.5増やす">＋</button>
+            <button type="button" class="step-button" data-step-feature="${feature}" data-step-direction="1" aria-label="${escapeHtml(labels[feature])}を0.5増やす">＋</button>
           </div>
           <p id="error-${feature}" class="field-error" aria-live="polite">${invalid ? validationMessage(feature) : ''}</p>
-          ${rangeWarningMarkup(feature)}
         </div>`;
       }
 
-      function renderInput(group) {
-        const valid = groupIsValid(group);
+      function renderManualInput(group) {
         return `<section class="screen" data-screen="input${group.number}">
-          <h1 class="question-heading" tabindex="-1">給湯器の画面の「表示${group.number}」の数字を入れてください</h1>
-          <p class="lead">画面を見ながら、5つの数字を入力してください。</p>
+          <h1 class="question-heading" tabindex="-1">センサー${group.number}の数値を入力してください</h1>
+          <p class="lead">センサー${group.number}の画面を見ながら、表示されている5つの数値を入力してください。</p>
+          <div class="advice-block" style="margin-bottom: 24px;">
+            <h3>入力の流れ</h3>
+            <ol class="advice-steps">
+              <li>センサー${group.number}の画面を確認します。</li>
+              <li>温度・湿度・電圧・使用量の数値を入力します。</li>
+              <li>回転数は選択肢から選びます。</li>
+            </ol>
+          </div>
           <div class="input-group">${group.features.map(renderField).join('')}</div>
           <div class="screen-actions">
-            <button class="btn-primary" type="button" data-next-group="${group.number}" ${valid ? '' : 'disabled'}>${state.editingFromConfirm ? '確認にもどる' : '次へ'}</button>
-            <p class="next-reason">${valid ? '入力できたら、次へ進んでください。' : '5つの数字を入力すると、次へ進めます。'}</p>
+            <button class="btn-primary" type="button" data-next-group="${group.number}" ${ADKApp.allValid(state.values, group.features, meta.featureMeta) ? '' : 'disabled'}>${group.number === 3 ? '故障判定をする' : '次へ'}</button>
           </div>
-        </section>`;
-      }
-
-      function renderPhoto() {
-        const photoButtonsDisabled = photoBusy ? 'disabled' : '';
-        const previewMarkup = photoPreviewSrc ? `<figure class="photo-preview">
-          <img src="${escapeHtml(photoPreviewSrc)}" alt="読み取り対象として選んだ給湯器の画面" decoding="async">
-          <figcaption>この写真を読み取ります。</figcaption>
-        </figure>` : '';
-        const statusMarkup = photoBusy ? '<p class="photo-status" aria-live="polite">読み取り中です…（10秒ほどかかります）</p>' : '';
-        const countMarkup = photoCountMessage ? `<div class="photo-feedback" role="status" aria-live="polite">
-          <p>${escapeHtml(photoCountMessage)}</p>
-          <div class="button-stack">
-            <button class="btn-primary" type="button" data-photo-retry>もう一度撮る</button>
-            <button class="btn-secondary" type="button" data-photo-manual>手で入力する</button>
-          </div>
-        </div>` : '';
-        const errorMarkup = photoErrorMessage ? `<div class="photo-feedback is-error" role="alert" aria-live="polite">
-          <p>${escapeHtml(photoErrorMessage)}</p>
-          <button class="btn-secondary" type="button" data-photo-manual>手で入力する</button>
-        </div>` : '';
-        const actionMarkup = cameraViewActive ? `<div class="camera-stage">
-          <video class="camera-video" data-photo-video autoplay playsinline muted aria-label="給湯器の画面を映すカメラ"></video>
-          <button class="btn-primary" type="button" data-photo-shutter ${photoButtonsDisabled}>この画面を撮る</button>
-          <button class="btn-secondary" type="button" data-photo-cancel ${photoButtonsDisabled}>やめる</button>
-        </div>` : `<div class="button-stack">
-          <button class="btn-primary" type="button" data-photo-camera ${photoButtonsDisabled}>📷 カメラで撮る</button>
-          <button class="btn-primary" type="button" data-photo-saved ${photoButtonsDisabled}>🖼 保存した写真を選ぶ</button>
-        </div>`;
-        return `<section class="screen" data-screen="photo">
-          <h1 class="question-heading" tabindex="-1">給湯器の画面を写真で読み取ります</h1>
-          <p class="lead">画面全体がまっすぐ、明るく写るように撮ってください</p>
-          ${previewMarkup}
-          ${statusMarkup}
-          ${countMarkup}
-          ${errorMarkup}
-          ${actionMarkup}
-          <input class="hidden-file-input" type="file" accept="image/*" capture="environment" data-photo-file="camera" aria-label="カメラで撮る">
-          <input class="hidden-file-input" type="file" accept="image/*" data-photo-file="saved" aria-label="保存した写真を選ぶ">
-        </section>`;
-      }
-
-      function renderConfirm() {
-        return `<section class="screen" data-screen="confirm">
-          <h1 class="question-heading" tabindex="-1">入力した数字を確認してください</h1>
-          ${state.fromPhoto ? '<div class="photo-notice">写真から読み取った数字です。<br>給湯器の画面と同じか、1つずつ必ず確かめてください。</div>' : ''}
-          <p class="lead">まちがいがなければ、判定するボタンを押してください。</p>
-          <div class="confirm-list">
-            ${groups.map((group) => `<section class="confirm-group" aria-labelledby="confirm-${group.number}">
-              <h3 id="confirm-${group.number}">表示${group.number}</h3>
-              <dl class="confirm-values">${group.features.map((feature) => `<div class="confirm-row"><dt>${escapeHtml(labels[feature])}</dt><dd>${escapeHtml(displayNumber(state.values[feature]))}</dd></div>`).join('')}</dl>
-              <button type="button" class="edit-button" data-edit-group="${group.number}">表示${group.number}をなおす</button>
-            </section>`).join('')}
-          </div>
-          <div class="screen-actions"><button class="btn-primary" type="button" data-judge>判定する</button></div>
         </section>`;
       }
 
       function renderStart() {
         return `<section class="screen" data-screen="start">
           <div class="start-hero">
-            <div class="brand-mark">ADK 給湯器</div>
-            <h1 class="screen-heading" tabindex="-1">給湯器 かんたん点検</h1>
-            <p class="lead">給湯器の画面に出ている数字を入力すると、故障かどうかの目安がわかります。約3分です。</p>
-            <button class="btn-primary" type="button" data-start>はじめる</button>
-            <div class="start-photo-action"><button class="btn-secondary" type="button" data-photo-screen>📷 写真で数字を読み取る</button></div>
-            <div class="demo-box">
-              <p class="demo-title">試作デモ用</p>
-              <div class="button-stack">
-                <button class="btn-secondary" type="button" data-demo="fault">故障の例を入れる</button>
-                <button class="btn-secondary" type="button" data-demo="safe">故障でない例を入れる</button>
-              </div>
-            </div>
+            <div class="brand-mark">ガス機器サポート</div>
+            <h1 class="screen-heading" tabindex="-1">チャットボットで状況を確認します</h1>
+            <p class="lead">ガスのにおい・お湯の不具合・センサー表示の異常など、状況に応じて適切な対応をご案内します。</p>
+            <button class="btn-primary" type="button" data-start>相談をはじめる</button>
           </div>
         </section>`;
       }
 
-      function renderFault() {
-        return `<section class="screen" data-screen="fault">
-          <div class="result-card fault">
-            <span class="result-icon" aria-hidden="true">⚠</span>
-            <h1 class="screen-heading" tabindex="-1">故障の可能性があります</h1>
-            <p class="lead">安全のため給湯器の使用をやめて、修理窓口にお電話ください。</p>
-            <a class="btn-call" href="tel:0120-000-000">📞 修理窓口に電話する 0120-000-000</a>
-            <p class="call-note">ガスのにおいがするときは、火や電気のスイッチにふれず、窓を開けて、ガス会社に連絡してください。</p>
-          </div>
-          <div class="screen-actions"><button class="btn-secondary" type="button" data-reset>最初からやりなおす</button></div>
-        </section>`;
-      }
-
-      function renderChoice() {
-        return `<section class="screen" data-screen="safe-choice">
-          <div class="result-card safe">
-            <span class="result-icon" aria-hidden="true">✓</span>
-            <h1 class="screen-heading" tabindex="-1">故障ではない可能性が高いです</h1>
-            <p class="lead">使い方や一時的な原因のことが多いです。いまの様子にいちばん近いものを選んでください。</p>
-            <p class="safe-warning">においやけむり、水もれがあるときは、すぐにお電話ください。<br><a class="safe-warning-call" href="tel:0120-000-000">0120-000-000</a></p>
-          </div>
-          <div class="choice-list" role="group" aria-label="いまの様子">
-            <button type="button" class="choice choice-emergency" data-emergency><span class="choice-symbol" aria-hidden="true">⚠</span>けむり・こげくさいにおい・すす・異音・水もれがある</button>
-            ${symptoms.map(([key, icon, text]) => `<button type="button" class="choice" data-symptom="${key}" aria-pressed="${state.symptom === key}"><span class="choice-symbol" aria-hidden="true">${icon}</span>${escapeHtml(text)}</button>`).join('')}
-          </div>
-          <div class="screen-actions">
-            <button class="btn-primary" type="button" data-advice ${state.symptom ? '' : 'disabled'}>対処法を見る</button>
-            <p class="next-reason">${state.symptom ? '選んだ症状の対処法を確認できます。' : 'いちばん近い様子を1つ選んでください。'}</p>
+      function renderInquiry() {
+        return `<section class="screen" data-screen="inquiry">
+          <h1 class="question-heading" tabindex="-1">現在の状況を選んでください</h1>
+          <p class="lead">該当するものを1つ選んでください。状況に応じて、適切な対応に進みます。</p>
+          <div class="choice-list" role="group" aria-label="現在の状況">
+            ${emergencySymptoms.map((item) => `<button type="button" class="choice choice-emergency" data-symptom="${item.key}" data-emergency="true"><span class="choice-symbol" aria-hidden="true">${item.icon}</span>${escapeHtml(item.text)}</button>`).join('')}
+            <button type="button" class="choice" data-symptom="no_hot" data-emergency="false"><span class="choice-symbol" aria-hidden="true">🚿</span>お湯が出ない・湯量が少ない</button>
+            <button type="button" class="choice" data-symptom="weak_flow" data-emergency="false"><span class="choice-symbol" aria-hidden="true">💧</span>お湯の出が弱い・温度が低い</button>
+            <button type="button" class="choice" data-symptom="ignition" data-emergency="false"><span class="choice-symbol" aria-hidden="true">🔥</span>火がつかない・再点火できない</button>
+            <button type="button" class="choice" data-symptom="sensor" data-emergency="false"><span class="choice-symbol" aria-hidden="true">📟</span>表示ランプやセンサー表示が不安定</button>
+            <button type="button" class="choice" data-symptom="freeze" data-emergency="false"><span class="choice-symbol" aria-hidden="true">❄️</span>冬場だけお湯が出にくい</button>
           </div>
         </section>`;
       }
 
-      function adviceBlock(key) {
-        const item = advice[key];
-        const cautions = item.cautions || (item.caution ? [item.caution] : []);
-        return `<section class="advice-block"><h3>${item.title}</h3><ol class="advice-steps">${item.steps.map((step) => `<li>${step}</li>`).join('')}</ol>${cautions.map((caution) => `<div class="caution"><strong>注意</strong>${caution}</div>`).join('')}</section>`;
-      }
-
-      function renderAdvice() {
-        const keys = state.adviceKey === 'F' ? ['A', 'B', 'C', 'D', 'E'] : [state.adviceKey];
-        return `<section class="screen" data-screen="advice">
-          <h1 class="question-heading" tabindex="-1">対処法をお試しください</h1>
-          <p class="lead">できるものから、ゆっくり確認してください。</p>
-          <div class="advice-list">${keys.map(adviceBlock).join('')}</div>
-          <div class="screen-actions">
-            <p class="question-heading" style="margin-top: 8px;">これで直りましたか？</p>
-            <button class="btn-primary" type="button" data-fixed>はい、直りました</button>
-            <button class="btn-secondary" type="button" data-not-fixed>いいえ、直りません</button>
-          </div>
-        </section>`;
-      }
-
-      function renderPhone() {
-        return `<section class="screen" data-screen="phone">
+      function renderEmergencyPhone() {
+        return `<section class="screen" data-screen="emergency-phone">
           <div class="result-card fault">
             <span class="result-icon" aria-hidden="true">📞</span>
-            <h1 class="screen-heading" tabindex="-1">お電話ください</h1>
-            <p class="lead">作業員がうかがいます。お電話ください。</p>
-            <a class="btn-call" href="tel:0120-000-000">📞 修理窓口に電話する 0120-000-000</a>
+            <h1 class="screen-heading" tabindex="-1">すぐにご連絡ください</h1>
+            <p class="lead">ご連絡の前に、火や電気のスイッチに触れないようにし、窓を開けて換気してください。</p>
+            <a class="btn-call" href="tel:${getPhoneNumber()}">📞 ${getPhoneNumber()} に電話する</a>
           </div>
-          <div class="screen-actions"><button class="btn-secondary" type="button" data-reset>最初からやりなおす</button></div>
+          <div class="screen-actions">
+            <button class="btn-secondary" type="button" data-reset>最初からやりなおす</button>
+          </div>
+        </section>`;
+      }
+
+      function renderDiagnosisSelect() {
+        return `<section class="screen" data-screen="diagnosis-select">
+          <h1 class="question-heading" tabindex="-1">給湯器の状況を確認する方法を選んでください</h1>
+          <p class="lead">故障かどうかを一律に決めるのではなく、給湯器の今の状態を確認して、必要に応じて対処や連絡につなげます。</p>
+
+          <div class="advice-block">
+            <h3>取扱説明書を先に確認したい場合</h3>
+            <p class="subtle">センサー部分の開け方や表示の見方を確認できます。</p>
+            <a class="inline-link" href="assets/gas_support_manual.pdf" target="_blank" rel="noopener">📄 取扱説明書（PDF）を開く</a>
+          </div>
+
+          <div class="advice-block" style="margin-top: 20px;">
+            <h3>写真アップロードの手順</h3>
+            <ol class="advice-steps">
+              <li>センサー画面の写真をスマートフォンまたはPCから選びます。</li>
+              <li>画像をアップロードすると、数値を自動で読み取ります。</li>
+              <li>読み取れた数値を確認して、給湯器の状態を確認します。</li>
+            </ol>
+          </div>
+
+          <div class="advice-block" style="margin-top: 20px;">
+            <h3>手入力の手順</h3>
+            <ol class="advice-steps">
+              <li>センサー1の画面を確認して5つの値を入力します。</li>
+              <li>次にセンサー2、最後にセンサー3の順で入力します。</li>
+              <li>すべて入力し終えると、給湯器の状況を確認できます。</li>
+            </ol>
+          </div>
+
+          <div class="button-stack" style="margin-top: 28px;">
+            <button class="btn-primary" type="button" data-photo-ocr>📷 画像から読み取る</button>
+            <button class="btn-secondary" type="button" data-manual-input>⌨️ 数値を手入力する</button>
+          </div>
+        </section>`;
+      }
+
+      function renderPhoto() {
+        const preview = state.photoPreview ? `<figure class="photo-preview"><img src="${escapeHtml(state.photoPreview)}" alt="アップロードされたセンサー画面" decoding="async"></figure>` : `<figure class="photo-preview"><img src="assets/sensor-demo.svg" alt="センサー画面の撮影例" decoding="async"><figcaption>例：センサーと表示数字が大きく見えるように、光が反射しない位置で、横から斜めに撮影してください。</figcaption></figure>`;
+        return `<section class="screen" data-screen="photo">
+          <h1 class="question-heading" tabindex="-1">写真で給湯器の状態を確認します</h1>
+          <p class="lead">撮影時は、数字が見える角度で写真を撮ってください。下の例を参考にして、センサー部分がきちんと写るように撮影します。</p>
+          <div class="advice-block">
+            <h3>撮影のコツ</h3>
+            <ol class="advice-steps">
+              <li>センサー画面を正面に向け、反射が少ない場所で撮影します。</li>
+              <li>数字が小さく見えないよう、近くで撮影してください。</li>
+              <li>画像は横向きで、全体がきれいに写るようにしてください。</li>
+            </ol>
+          </div>
+          ${preview}
+          <div class="button-stack" style="margin-top: 16px;">
+            <a class="inline-link" href="assets/gas_support_manual.pdf" target="_blank" rel="noopener">📄 取扱説明書（PDF）を開く</a>
+            <label class="btn-primary" for="sensor-photo">📷 画像を選ぶ</label>
+            <input id="sensor-photo" type="file" accept="image/*" hidden>
+            <button class="btn-secondary" type="button" data-manual-input>数値を手入力する</button>
+          </div>
+        </section>`;
+      }
+
+      function renderFaultPhone() {
+        return `<section class="screen" data-screen="fault-phone">
+          <div class="result-card fault">
+            <span class="result-icon" aria-hidden="true">⚠️</span>
+            <h1 class="screen-heading" tabindex="-1">故障ありと判定されました</h1>
+            <p class="lead">ご連絡をして、確認と修理対応を進めてください。</p>
+            <a class="btn-call" href="tel:${getPhoneNumber()}">📞 ${getPhoneNumber()} に電話する</a>
+          </div>
+          <div class="screen-actions">
+            <button class="btn-secondary" type="button" data-reset>最初からやりなおす</button>
+          </div>
+        </section>`;
+      }
+
+      function renderNoFaultChoices() {
+        return `<section class="screen" data-screen="selfhelp-list">
+          <div class="result-card safe">
+            <span class="result-icon" aria-hidden="true">✓</span>
+            <h1 class="screen-heading" tabindex="-1">故障なしと判定されました</h1>
+            <p class="lead">自己解決の案内に沿って対処し、結果を選択してください。</p>
+            <p class="safe-warning">東京ガスなどの想定問題を参考に、該当するものを選んでください。</p>
+          </div>
+          <div class="choice-list" role="group" aria-label="自己解決の対象">
+            <button type="button" class="choice" data-help="no_hot"><span class="choice-symbol" aria-hidden="true">🚿</span>お湯が出ない・湯量が少ない</button>
+            <button type="button" class="choice" data-help="weak_flow"><span class="choice-symbol" aria-hidden="true">💧</span>お湯の出が弱い・温度が低い</button>
+            <button type="button" class="choice" data-help="ignition"><span class="choice-symbol" aria-hidden="true">🔥</span>火がつかない・再点火できない</button>
+            <button type="button" class="choice" data-help="sensor"><span class="choice-symbol" aria-hidden="true">📟</span>表示ランプやセンサー表示が不安定</button>
+            <button type="button" class="choice" data-help="freeze"><span class="choice-symbol" aria-hidden="true">❄️</span>冬場だけお湯が出にくい</button>
+          </div>
+        </section>`;
+      }
+
+      function renderSelfHelp() {
+        const item = selfHelpList[state.issue];
+        if (!item) return renderNoFaultChoices();
+        return `<section class="screen" data-screen="selfhelp">
+          <h1 class="question-heading" tabindex="-1">自己解決の案内</h1>
+          <p class="lead">${escapeHtml(item.source)} に基づく想定問題です。以下の対処を順番に確認してください。</p>
+          <div class="advice-block">
+            <h3>${escapeHtml(item.title)}</h3>
+            <ol class="advice-steps">${item.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
+            <div class="caution"><strong>注意</strong>${escapeHtml(item.caution)}</div>
+          </div>
+          <div class="screen-actions">
+            <p class="question-heading" style="margin-top: 8px;">対処の結果を選んでください</p>
+            <button class="btn-primary" type="button" data-fixed>治った</button>
+            <button class="btn-secondary" type="button" data-not-fixed>治らなかった</button>
+          </div>
+        </section>`;
+      }
+
+      function renderOperatorPhone() {
+        return `<section class="screen" data-screen="operator-phone">
+          <div class="result-card fault">
+            <span class="result-icon" aria-hidden="true">📞</span>
+            <h1 class="screen-heading" tabindex="-1">オペレーターにお問い合わせください</h1>
+            <p class="lead">改善しない場合は、オペレーターへご連絡いただき、ヒアリングを確認したうえで訪問対応をご案内します。</p>
+            <a class="btn-call" href="tel:${getPhoneNumber()}">📞 ${getPhoneNumber()} に電話する</a>
+          </div>
+          <div class="screen-actions">
+            <button class="btn-secondary" type="button" data-reset>最初からやりなおす</button>
+          </div>
         </section>`;
       }
 
@@ -1124,48 +936,181 @@
         return `<section class="screen" data-screen="complete">
           <div class="result-card safe">
             <span class="complete-mark" aria-hidden="true">✓</span>
-            <h1 class="screen-heading" tabindex="-1">ご確認ありがとうございました</h1>
-            <p class="lead">また困ったときはいつでもお使いください。</p>
+            <h1 class="screen-heading" tabindex="-1">対応ありがとうございました</h1>
+            <p class="lead">ご相談内容に応じて、適切な対応をご案内できました。</p>
           </div>
-          <div class="screen-actions"><button class="btn-primary" type="button" data-reset>最初にもどる</button></div>
+          <div class="screen-actions">
+            <button class="btn-primary" type="button" data-reset>最初にもどる</button>
+          </div>
         </section>`;
       }
 
-      function render({ moveFocus = true, focusSelector = null, restoreScrollY = null } = {}) {
+      function render() {
         const screen = state.screen;
         const progress = progressFor(screen);
+
         backButton.hidden = screen === 'start' || state.history.length === 0;
         progressWrap.hidden = progress === 0;
         if (progress > 0) {
-          progressLabel.textContent = screen === 'photo' ? '写真で入力' : `ステップ ${progress} / 5`;
-          progressBar.style.width = `${progress * 20}%`;
+          progressLabel.textContent = `ステップ ${progress} / 4`;
+          const width = screen === 'emergency-phone' ? 100 : (progress / 4) * 100;
+          progressBar.style.width = `${width}%`;
           progressTrack.setAttribute('aria-valuenow', String(progress));
         }
+
         if (screen === 'start') app.innerHTML = renderStart();
+        if (screen === 'inquiry') app.innerHTML = renderInquiry();
+        if (screen === 'diagnosis-select') app.innerHTML = renderDiagnosisSelect();
         if (screen === 'photo') app.innerHTML = renderPhoto();
-        if (screen.startsWith('input')) app.innerHTML = renderInput(groupForScreen(screen));
-        if (screen === 'confirm') app.innerHTML = renderConfirm();
-        if (screen === 'fault') app.innerHTML = renderFault();
-        if (screen === 'safe-choice') app.innerHTML = renderChoice();
-        if (screen === 'advice') app.innerHTML = renderAdvice();
-        if (screen === 'phone') app.innerHTML = renderPhone();
+        if (screen === 'emergency-phone') app.innerHTML = renderEmergencyPhone();
+        if (screen === 'fault-phone') app.innerHTML = renderFaultPhone();
+        if (screen === 'selfhelp-list') app.innerHTML = renderNoFaultChoices();
+        if (screen === 'selfhelp') app.innerHTML = renderSelfHelp();
+        if (screen === 'operator-phone') app.innerHTML = renderOperatorPhone();
         if (screen === 'complete') app.innerHTML = renderComplete();
-        if (moveFocus) {
-          const heading = app.querySelector('[tabindex="-1"]');
-          if (heading) window.setTimeout(() => heading.focus(), 0);
-        } else {
-          window.setTimeout(() => {
-            const focusTarget = focusSelector ? app.querySelector(focusSelector) : null;
-            if (focusTarget) {
-              try {
-                focusTarget.focus({ preventScroll: true });
-              } catch (error) {
-                focusTarget.focus();
-              }
-            }
-            if (restoreScrollY !== null) window.scrollTo(0, restoreScrollY);
-          }, 0);
+        if (screen.startsWith('input')) app.innerHTML = renderManualInput(groupForScreen(screen));
+
+        const heading = app.querySelector('[tabindex="-1"]');
+        if (heading) window.setTimeout(() => heading.focus(), 0);
+      }
+
+      function judgeCurrentValues() {
+        if (!ADKApp.allValid(state.values, meta.features, meta.featureMeta)) {
+          const groupNumber = ADKApp.firstInvalidGroup(state.values, groups, meta.featureMeta);
+          go(groupNumber === null ? 'fault-phone' : `input${groupNumber}`);
+          return;
         }
+        state.result = ADKApp.judge(state.values, meta.features, meta.threshold);
+        if (state.result === 'fault') {
+          go('fault-phone');
+        } else {
+          go('selfhelp-list');
+        }
+      }
+
+      function runPhotoOcr(file) {
+        const runId = ++photoRunId;
+        photoBusy = true;
+        state.photoPreview = URL.createObjectURL(file);
+        render();
+
+        const loadTesseract = () => {
+          if (window.Tesseract) return Promise.resolve(window.Tesseract);
+          if (tesseractPromise) return tesseractPromise;
+          tesseractPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            script.async = true;
+            script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract.js is unavailable'));
+            script.onerror = () => reject(new Error('Tesseract.js failed to load'));
+            document.head.appendChild(script);
+          });
+          return tesseractPromise;
+        };
+
+        const loadImage = (sourceUrl) => new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('画像を読み込めませんでした'));
+          image.src = sourceUrl;
+        });
+
+        const preprocessImage = (image) => {
+          const sourceWidth = image.naturalWidth || image.width;
+          const sourceHeight = image.naturalHeight || image.height;
+          const longSide = Math.max(sourceWidth, sourceHeight);
+          const scale = 1600 / longSide;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+          canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const grayscale = new Array(canvas.width * canvas.height);
+          let totalBrightness = 0;
+          for (let index = 0, pixel = 0; index < imageData.data.length; index += 4, pixel += 1) {
+            const luminance = Math.round(0.299 * imageData.data[index] + 0.587 * imageData.data[index + 1] + 0.114 * imageData.data[index + 2]);
+            grayscale[pixel] = luminance;
+            totalBrightness += luminance;
+          }
+          const meanBrightness = totalBrightness / grayscale.length;
+          if (meanBrightness < 128) grayscale.forEach((value, index) => { grayscale[index] = 255 - value; });
+          let histogram = new Array(256).fill(0);
+          grayscale.forEach((value) => { histogram[value] += 1; });
+          const total = grayscale.length;
+          let sum = 0;
+          histogram.forEach((count, value) => { sum += value * count; });
+          let bestThreshold = 127;
+          let bestVariance = 0;
+          let sumBackground = 0;
+          let weightBackground = 0;
+          for (let threshold = 0; threshold < 256; threshold += 1) {
+            weightBackground += histogram[threshold];
+            if (weightBackground === 0) continue;
+            const weightForeground = total - weightBackground;
+            if (weightForeground === 0) break;
+            sumBackground += threshold * histogram[threshold];
+            const meanBackground = sumBackground / weightBackground;
+            const meanForeground = (sum - sumBackground) / weightForeground;
+            const variance = weightBackground * weightForeground * (meanBackground - meanForeground) ** 2;
+            if (variance > bestVariance) {
+              bestVariance = variance;
+              bestThreshold = threshold;
+            }
+          }
+          for (let pixel = 0, index = 0; pixel < grayscale.length; pixel += 1, index += 4) {
+            const value = grayscale[pixel] >= bestThreshold ? 255 : 0;
+            imageData.data[index] = value;
+            imageData.data[index + 1] = value;
+            imageData.data[index + 2] = value;
+            imageData.data[index + 3] = 255;
+          }
+          context.putImageData(imageData, 0, 0);
+          return canvas;
+        };
+
+        loadImage(state.photoPreview)
+          .then(async (image) => {
+            if (runId !== photoRunId || state.screen !== 'photo') return;
+            const processedCanvas = preprocessImage(image);
+            const tesseract = await loadTesseract();
+            if (runId !== photoRunId || state.screen !== 'photo') return;
+            const worker = await tesseract.createWorker('eng');
+            activeWorker = worker;
+            await worker.setParameters({ tessedit_char_whitelist: '0123456789.', tessedit_pageseg_mode: '11' });
+            const result = await worker.recognize(processedCanvas);
+            if (runId !== photoRunId || state.screen !== 'photo') return;
+            const numbers = ADKApp.extractNumbers(result?.data?.text || '');
+            const readings = ADKApp.assignReadings(numbers, meta.features);
+            if (!readings) {
+              photoBusy = false;
+              alert('数字を読み取れませんでした。数値を手入力してください。');
+              render();
+              return;
+            }
+            state.values = readings;
+            photoBusy = false;
+            if (photoPreviewObjectUrl) URL.revokeObjectURL(photoPreviewObjectUrl);
+            photoPreviewObjectUrl = '';
+            judgeCurrentValues();
+            if (activeWorker === worker) activeWorker = null;
+            await worker.terminate();
+          })
+          .catch((error) => {
+            if (runId !== photoRunId || state.screen !== 'photo') return;
+            photoBusy = false;
+            alert('画像の読み取りに失敗しました。数値を手入力してください。');
+            render();
+          });
+      }
+
+      function stepValue(feature, direction) {
+        const current = ADKApp.parseValue(state.values[feature]);
+        const base = Number.isFinite(current) ? current : Number(meta.featureMeta[feature].p1);
+        state.values[feature] = (base + direction * 0.5).toFixed(1);
+        const scrollY = window.scrollY;
+        render();
+        window.scrollTo(0, scrollY);
       }
 
       function refreshValidation() {
@@ -1178,99 +1123,96 @@
           field.classList.toggle('is-invalid', invalid);
           const error = field.querySelector('.field-error');
           if (error) error.textContent = invalid ? validationMessage(feature) : '';
-          const warning = field.querySelector('.field-range-warning');
-          if (warning) warning.hidden = !isOutOfRange(feature);
         });
-        const valid = groupIsValid(group);
         const next = app.querySelector('[data-next-group]');
-        const reason = app.querySelector('.next-reason');
-        if (next) next.disabled = !valid;
-        if (reason) reason.textContent = valid ? '入力できたら、次へ進んでください。' : '5つの数字を入力すると、次へ進めます。';
+        if (next) next.disabled = !groupIsValid(group);
       }
 
-      function stepValue(feature, direction) {
-        const current = ADKApp.parseValue(state.values[feature]);
-        const base = Number.isFinite(current) ? current : Number(meta.featureMeta[feature].p1);
-        state.values[feature] = (base + direction * 0.5).toFixed(1);
-        const scrollY = window.scrollY;
-        render({ moveFocus: false, focusSelector: `[data-input-feature="${feature}"]`, restoreScrollY: scrollY });
-      }
+      app.addEventListener('click', (event) => {
+        const target = event.target.closest('button, a, label');
+        if (!target) return;
+
+        if (target.matches('[data-start]')) {
+          go('inquiry');
+        }
+
+        if (target.matches('[data-symptom]')) {
+          const isEmergency = target.dataset.emergency === 'true';
+          if (isEmergency) {
+            state.branch = 'emergency';
+            go('emergency-phone');
+          } else {
+            state.branch = 'diagnosis';
+            go('diagnosis-select');
+          }
+        }
+
+        if (target.matches('[data-photo-ocr]')) {
+          go('photo');
+        }
+
+        if (target.matches('[data-manual-input]')) {
+          state.diagnosis = 'manual';
+          go('input1');
+        }
+
+        if (target.matches('[data-step-feature]')) {
+          stepValue(target.dataset.stepFeature, Number(target.dataset.stepDirection));
+        }
+
+        if (target.matches('[data-rotation]')) {
+          const feature = target.dataset.rotation;
+          state.values[feature] = target.dataset.value;
+          render();
+        }
+
+        if (target.matches('[data-next-group]')) {
+          const groupNumber = Number(target.dataset.nextGroup);
+          if (groupNumber >= 3) {
+            judgeCurrentValues();
+            return;
+          }
+          go(`input${groupNumber + 1}`);
+        }
+
+        if (target.matches('[data-help]')) {
+          state.issue = target.dataset.help;
+          go('selfhelp');
+        }
+
+        if (target.matches('[data-fixed]')) {
+          go('complete');
+        }
+
+        if (target.matches('[data-not-fixed]')) {
+          go('operator-phone');
+        }
+
+        if (target.matches('[data-reset]')) {
+          reset();
+        }
+      });
 
       app.addEventListener('input', (event) => {
         const input = event.target.closest('[data-input-feature]');
         if (!input) return;
-        const feature = input.dataset.inputFeature;
-        state.values[feature] = input.value;
+        state.values[input.dataset.inputFeature] = input.value;
         refreshValidation();
       });
 
       app.addEventListener('change', (event) => {
-        const input = event.target.closest('[data-photo-file]');
-        if (!input || !input.files || !input.files[0] || photoBusy) return;
+        const input = event.target.closest('#sensor-photo');
+        if (!input || !input.files || !input.files[0]) return;
         const file = input.files[0];
         input.value = '';
+        if (photoPreviewObjectUrl) URL.revokeObjectURL(photoPreviewObjectUrl);
+        photoPreviewObjectUrl = URL.createObjectURL(file);
+        state.photoPreview = photoPreviewObjectUrl;
         runPhotoOcr(file);
       });
 
-      app.addEventListener('click', (event) => {
-        const target = event.target.closest('button, a');
-        if (!target) return;
-        if (target.matches('[data-start]')) {
-          state.fromPhoto = false;
-          go('input1');
-        }
-        if (target.matches('[data-photo-screen]')) {
-          state.fromPhoto = false;
-          resetPhotoUi();
-          go('photo');
-        }
-        if (target.matches('[data-photo-camera]')) startCamera();
-        if (target.matches('[data-photo-saved]')) triggerPhotoFile('saved');
-        if (target.matches('[data-photo-shutter]')) captureCameraFrame();
-        if (target.matches('[data-photo-cancel]')) {
-          stopCamera();
-          render({ moveFocus: false });
-        }
-        if (target.matches('[data-photo-retry]')) {
-          resetPhotoUi();
-          render({ moveFocus: false });
-        }
-        if (target.matches('[data-photo-manual]')) continueWithManualInput();
-        if (target.matches('[data-demo]')) fillDemo(target.dataset.demo);
-        if (target.matches('[data-step-feature]')) stepValue(target.dataset.stepFeature, Number(target.dataset.stepDirection));
-        if (target.matches('[data-rotation]')) {
-          const feature = target.dataset.rotation;
-          state.values[feature] = target.dataset.value;
-          const scrollY = window.scrollY;
-          render({ moveFocus: false, focusSelector: `[data-rotation="${feature}"][data-value="${target.dataset.value}"]`, restoreScrollY: scrollY });
-        }
-        if (target.matches('[data-next-group]')) {
-          if (state.editingFromConfirm) goToConfirmOrFirstInvalid();
-          else { const next = Number(target.dataset.nextGroup) + 1; if (next <= 3) go(`input${next}`); else goToConfirmOrFirstInvalid(); }
-        }
-        if (target.matches('[data-edit-group]')) { state.editingFromConfirm = true; go(`input${target.dataset.editGroup}`); }
-        if (target.matches('[data-judge]')) {
-          if (!ADKApp.allValid(state.values, meta.features, meta.featureMeta)) {
-            go(firstInvalidScreen());
-            return;
-          }
-          state.result = ADKApp.judge(state.values, meta.features, meta.threshold);
-          go(state.result === 'fault' ? 'fault' : 'safe-choice');
-        }
-        if (target.matches('[data-emergency]')) go('phone');
-        if (target.matches('[data-symptom]')) {
-          state.symptom = target.dataset.symptom;
-          render({ moveFocus: false, focusSelector: `[data-symptom="${state.symptom}"]`, restoreScrollY: window.scrollY });
-        }
-        if (target.matches('[data-advice]')) { state.adviceKey = state.symptom; go('advice'); }
-        if (target.matches('[data-fixed]')) go('complete');
-        if (target.matches('[data-not-fixed]')) go('phone');
-        if (target.matches('[data-reset]')) reset();
-      });
-
       backButton.addEventListener('click', back);
-      window.addEventListener('pagehide', stopCamera);
-      render({ moveFocus: true });
+      render();
     })();
   </script>
 </body>

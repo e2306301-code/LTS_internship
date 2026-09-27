@@ -1,0 +1,37 @@
+<svg width="960" height="620" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">給湯器センサーの撮影例</title>
+  <desc id="desc">センサー画面がしっかり見えるように、数字と表示部分が大きく写るように撮影する例</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1">
+      <stop offset="0%" stop-color="#f7f2ea"/>
+      <stop offset="100%" stop-color="#eef7ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1f1b16" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="960" height="620" fill="url(#bg)"/>
+  <rect x="120" y="90" width="720" height="420" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="168" y="138" width="620" height="324" rx="18" fill="#ecf7ee" stroke="#4a8d6c" stroke-width="4"/>
+  <rect x="188" y="160" width="140" height="62" rx="12" fill="#ffffff" stroke="#b7c6b6" stroke-width="3"/>
+  <text x="214" y="201" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1f1b16">温度</text>
+  <text x="360" y="201" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#1f1b16">34.8℃</text>
+
+  <rect x="188" y="248" width="140" height="62" rx="12" fill="#ffffff" stroke="#b7c6b6" stroke-width="3"/>
+  <text x="214" y="289" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1f1b16">湿度</text>
+  <text x="360" y="289" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#1f1b16">30.7%</text>
+
+  <rect x="188" y="336" width="140" height="62" rx="12" fill="#ffffff" stroke="#b7c6b6" stroke-width="3"/>
+  <text x="214" y="377" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1f1b16">電圧</text>
+  <text x="360" y="377" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#1f1b16">76.1V</text>
+
+  <path d="M620 160 L780 160 L780 410 L620 410" fill="none" stroke="#4a8d6c" stroke-width="4" stroke-dasharray="12 10"/>
+  <text x="646" y="214" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f1b16">数字がはっきり</text>
+  <text x="646" y="250" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f1b16">見える角度で</text>
+  <text x="646" y="286" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f1b16">撮影する</text>
+  <text x="644" y="338" font-family="Arial, sans-serif" font-size="18" fill="#495057">例: 反射が少ない場所</text>
+
+  <circle cx="252" cy="520" r="54" fill="#d4eadb" stroke="#4a8d6c" stroke-width="4"/>
+  <path d="M232 520 L248 536 L280 500" fill="none" stroke="#1f6b3a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="535" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1f1b16">このように、数字が見える状態で撮影してください</text>
+</svg>
